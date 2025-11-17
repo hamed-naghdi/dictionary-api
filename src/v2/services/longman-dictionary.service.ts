@@ -1,20 +1,19 @@
 import * as cheerio from "cheerio";
+import {Cheerio} from "cheerio";
 import {
-  LongmanDictionaryResponse,
-  LongmanDictionaryEntry,
-  LongmanLexicalEntry,
-  LongmanSense,
-  LongmanExample,
-  LongmanPronunciation,
-  LongmanLexicalCategory,
-  LongmanGrammaticalFeatures,
-  LongmanEtymology,
-  LongmanRegister,
-  LongmanDomain,
-  LongmanRegion,
+    LongmanDictionaryEntry,
+    LongmanDictionaryResponse,
+    LongmanDomain,
+    LongmanEtymology,
+    LongmanExample,
+    LongmanGrammaticalFeatures,
+    LongmanLexicalCategory,
+    LongmanLexicalEntry,
+    LongmanPronunciation,
+    LongmanRegion,
 } from "../types/longman";
-import { Element } from "domhandler";
-import { BaseDictionaryService } from "./base-dictionary.service";
+import {Element} from "domhandler";
+import {BaseDictionaryService} from "./base-dictionary.service";
 
 /**
  * Service to scrape definitions from Longman Dictionaries
@@ -443,88 +442,88 @@ export class LongmanDictionaryService extends BaseDictionaryService<LongmanDicti
         const text = $(exampleElem).text().trim();
         if (!text) return;
 
-        const example: LongmanExample = { text };
+        // const example: LongmanExample = { text };
 
         // Check for source attribution
-        const source = $(exampleElem).find(".cf").text().trim();
-        if (source) {
-          example.source = source;
-        }
+        // const source = $(exampleElem).find(".cf").text().trim();
+        // if (source) {
+        //   example.source = source;
+        // }
+        //
+        // // Check for notes
+        // const notes = $(exampleElem).find(".label").text().trim();
+        // if (notes) {
+        //   example.notes = notes;
+        // }
 
-        // Check for notes
-        const notes = $(exampleElem).find(".label").text().trim();
-        if (notes) {
-          example.notes = notes;
-        }
-
-        examples.push(example);
+        // examples.push(example);
       });
 
     // Also check for extra examples in collapsible sections
-    $(senseElem)
-      .find(".collapse .unx")
-      .each((_, extraExampleElem) => {
-        const text = $(extraExampleElem).text().trim();
-        if (text) {
-          examples.push({ text });
-        }
-      });
+    // $(senseElem)
+    //   .find(".collapse .unx")
+    //   .each((_, extraExampleElem) => {
+    //     const text = $(extraExampleElem).text().trim();
+    //     if (text) {
+    //       examples.push({ text });
+    //     }
+    //   });
 
     return examples;
   }
 
-  /**
-   * Extract register information (formal, informal, etc.)
-   * @param $ Cheerio instance
-   * @param element The element to extract from
-   * @returns Array of register information
-   * @private
-   */
-  private extractRegisters(
-    $: cheerio.CheerioAPI,
-    element: Element
-  ): LongmanRegister[] {
-    const registers: LongmanRegister[] = [];
-
-    // Look for register labels
-    $(element)
-      .find(".grammar")
-      .each((_, grammarElem) => {
-        const text = $(grammarElem).text().trim();
-        if (!text) return;
-
-        // Some common register types
-        const registerTypes = [
-          "formal",
-          "informal",
-          "slang",
-          "literary",
-          "humorous",
-          "technical",
-        ];
-        const lowerText = text.toLowerCase();
-
-        for (const type of registerTypes) {
-          if (lowerText.includes(type)) {
-            registers.push({
-              type,
-              notes: text,
-            });
-            break;
-          }
-        }
-
-        // If no specific type identified but it's a register note
-        if (
-          registers.length === 0 &&
-          (lowerText.includes("used") || lowerText.includes("style"))
-        ) {
-          registers.push({ type: "other", notes: text });
-        }
-      });
-
-    return registers;
-  }
+  // /**
+  //  * Extract register information (formal, informal, etc.)
+  //  * @param $ Cheerio instance
+  //  * @param element The element to extract from
+  //  * @returns Array of register information
+  //  * @private
+  //  */
+  // private extractRegisters(
+  //   $: cheerio.CheerioAPI,
+  //   element: Element
+  // ): LongmanRegister[] {
+  //   const registers: LongmanRegister[] = [];
+  //
+  //   // Look for register labels
+  //   $(element)
+  //     .find(".grammar")
+  //     .each((_, grammarElem) => {
+  //       const text = $(grammarElem).text().trim();
+  //       if (!text) return;
+  //
+  //       // Some common register types
+  //       const registerTypes = [
+  //         "formal",
+  //         "informal",
+  //         "slang",
+  //         "literary",
+  //         "humorous",
+  //         "technical",
+  //       ];
+  //       const lowerText = text.toLowerCase();
+  //
+  //       for (const type of registerTypes) {
+  //         if (lowerText.includes(type)) {
+  //           registers.push({
+  //             type,
+  //             notes: text,
+  //           });
+  //           break;
+  //         }
+  //       }
+  //
+  //       // If no specific type identified but it's a register note
+  //       if (
+  //         registers.length === 0 &&
+  //         (lowerText.includes("used") || lowerText.includes("style"))
+  //       ) {
+  //         registers.push({ type: "other", notes: text });
+  //       }
+  //     });
+  //
+  //   return registers;
+  // }
 
   /**
    * Extract domain information (subject field)
@@ -716,151 +715,151 @@ export class LongmanDictionaryService extends BaseDictionaryService<LongmanDicti
     return synonyms.length > 0 ? synonyms : undefined;
   }
 
-  /**
-   * Extract subsenses from a sense block
-   * @param $ Cheerio instance
-   * @param element The sense element
-   * @returns Array of subsenses
-   * @private
-   */
-  private extractSubsenses(
-    $: cheerio.CheerioAPI,
-    element: Element
-  ): LongmanSense[] {
-    const subsenses: LongmanSense[] = [];
+  // /**
+  //  * Extract subsenses from a sense block
+  //  * @param $ Cheerio instance
+  //  * @param element The sense element
+  //  * @returns Array of subsenses
+  //  * @private
+  //  */
+  // private extractSubsenses(
+  //   $: cheerio.CheerioAPI,
+  //   element: Element
+  // ): LongmanSense[] {
+  //   const subsenses: LongmanSense[] = [];
+  //
+  //   // In Longman, subsenses might be in a separate list or with special formatting
+  //   $(element)
+  //     .find(".subsense")
+  //     .each((_, subsenseElem) => {
+  //       const definition = $(subsenseElem).find(".def").text().trim();
+  //       if (!definition) return;
+  //
+  //       const subsense: LongmanSense = { definition };
+  //
+  //       // Extract examples
+  //       const examples = this.extractExamples($, subsenseElem);
+  //       if (examples.length > 0) {
+  //         subsense.examples = examples;
+  //       }
+  //
+  //       // Extract registers
+  //       const registers = this.extractRegisters($, subsenseElem);
+  //       if (registers.length > 0) {
+  //         subsense.registers = registers;
+  //       }
+  //
+  //       // Extract domains
+  //       const domains = this.extractDomains($, subsenseElem);
+  //       if (domains.length > 0) {
+  //         subsense.domains = domains;
+  //       }
+  //
+  //       // Extract regions
+  //       const regions = this.extractRegions($, subsenseElem);
+  //       if (regions.length > 0) {
+  //         subsense.regions = regions;
+  //       }
+  //
+  //       subsenses.push(subsense);
+  //     });
+  //
+  //   return subsenses;
+  // }
 
-    // In Longman, subsenses might be in a separate list or with special formatting
-    $(element)
-      .find(".subsense")
-      .each((_, subsenseElem) => {
-        const definition = $(subsenseElem).find(".def").text().trim();
-        if (!definition) return;
-
-        const subsense: LongmanSense = { definition };
-
-        // Extract examples
-        const examples = this.extractExamples($, subsenseElem);
-        if (examples.length > 0) {
-          subsense.examples = examples;
-        }
-
-        // Extract registers
-        const registers = this.extractRegisters($, subsenseElem);
-        if (registers.length > 0) {
-          subsense.registers = registers;
-        }
-
-        // Extract domains
-        const domains = this.extractDomains($, subsenseElem);
-        if (domains.length > 0) {
-          subsense.domains = domains;
-        }
-
-        // Extract regions
-        const regions = this.extractRegions($, subsenseElem);
-        if (regions.length > 0) {
-          subsense.regions = regions;
-        }
-
-        subsenses.push(subsense);
-      });
-
-    return subsenses;
-  }
-
-  /**
-   * Extract senses from an entry
-   * @param $ Cheerio instance
-   * @param element The entry element
-   * @returns Array of senses
-   * @private
-   */
-  private extractSenses(
-    $: cheerio.CheerioAPI,
-    element: Element
-  ): LongmanSense[] {
-    const senses: LongmanSense[] = [];
-
-    $(element)
-      .find(".sense")
-      .each((_, senseElem) => {
-        const definition = $(senseElem).find(".def").text().trim();
-        if (!definition) return;
-
-        // Create the basic sense
-        const sense: LongmanSense = { definition };
-
-        // Extract examples
-        const examples = this.extractExamples($, senseElem);
-        if (examples.length > 0) {
-          sense.examples = examples;
-        }
-
-        // Extract registers
-        const registers = this.extractRegisters($, senseElem);
-        if (registers.length > 0) {
-          sense.registers = registers;
-        }
-
-        // Extract domains
-        const domains = this.extractDomains($, senseElem);
-        if (domains.length > 0) {
-          sense.domains = domains;
-        }
-
-        // Extract regions
-        const regions = this.extractRegions($, senseElem);
-        if (regions.length > 0) {
-          sense.regions = regions;
-        }
-
-        // Extract subsenses
-        const subsenses = this.extractSubsenses($, senseElem);
-        if (subsenses.length > 0) {
-          sense.subsenses = subsenses;
-        }
-
-        // Extract synonyms
-        const synonyms = this.extractSynonyms($, senseElem);
-        if (synonyms) {
-          sense.synonyms = synonyms;
-        }
-
-        // Extract cross-references
-        const crossReferences: string[] = [];
-        $(senseElem)
-          .find(".xrefs a")
-          .each((_, xrefElem) => {
-            const xrefText = $(xrefElem).text().trim();
-            if (xrefText) {
-              crossReferences.push(xrefText);
-            }
-          });
-
-        if (crossReferences.length > 0) {
-          sense.crossReferences = crossReferences;
-        }
-
-        // Extract notes
-        const notes: string[] = [];
-        $(senseElem)
-          .find(".note")
-          .each((_, noteElem) => {
-            const noteText = $(noteElem).text().trim();
-            if (noteText) {
-              notes.push(noteText);
-            }
-          });
-
-        if (notes.length > 0) {
-          sense.notes = notes;
-        }
-
-        senses.push(sense);
-      });
-
-    return senses;
-  }
+  // /**
+  //  * Extract senses from an entry
+  //  * @param $ Cheerio instance
+  //  * @param element The entry element
+  //  * @returns Array of senses
+  //  * @private
+  //  */
+  // private extractSenses(
+  //   $: cheerio.CheerioAPI,
+  //   element: Element
+  // ): LongmanSense[] {
+  //   const senses: LongmanSense[] = [];
+  //
+  //   $(element)
+  //     .find(".sense")
+  //     .each((_, senseElem) => {
+  //       const definition = $(senseElem).find(".def").text().trim();
+  //       if (!definition) return;
+  //
+  //       // Create the basic sense
+  //       const sense: LongmanSense = { definition };
+  //
+  //       // Extract examples
+  //       const examples = this.extractExamples($, senseElem);
+  //       if (examples.length > 0) {
+  //         sense.examples = examples;
+  //       }
+  //
+  //       // Extract registers
+  //       const registers = this.extractRegisters($, senseElem);
+  //       if (registers.length > 0) {
+  //         sense.registers = registers;
+  //       }
+  //
+  //       // Extract domains
+  //       const domains = this.extractDomains($, senseElem);
+  //       if (domains.length > 0) {
+  //         sense.domains = domains;
+  //       }
+  //
+  //       // Extract regions
+  //       const regions = this.extractRegions($, senseElem);
+  //       if (regions.length > 0) {
+  //         sense.regions = regions;
+  //       }
+  //
+  //       // Extract subsenses
+  //       const subsenses = this.extractSubsenses($, senseElem);
+  //       if (subsenses.length > 0) {
+  //         sense.subsenses = subsenses;
+  //       }
+  //
+  //       // Extract synonyms
+  //       const synonyms = this.extractSynonyms($, senseElem);
+  //       if (synonyms) {
+  //         sense.synonyms = synonyms;
+  //       }
+  //
+  //       // Extract cross-references
+  //       const crossReferences: string[] = [];
+  //       $(senseElem)
+  //         .find(".xrefs a")
+  //         .each((_, xrefElem) => {
+  //           const xrefText = $(xrefElem).text().trim();
+  //           if (xrefText) {
+  //             crossReferences.push(xrefText);
+  //           }
+  //         });
+  //
+  //       if (crossReferences.length > 0) {
+  //         sense.crossReferences = crossReferences;
+  //       }
+  //
+  //       // Extract notes
+  //       const notes: string[] = [];
+  //       $(senseElem)
+  //         .find(".note")
+  //         .each((_, noteElem) => {
+  //           const noteText = $(noteElem).text().trim();
+  //           if (noteText) {
+  //             notes.push(noteText);
+  //           }
+  //         });
+  //
+  //       if (notes.length > 0) {
+  //         sense.notes = notes;
+  //       }
+  //
+  //       senses.push(sense);
+  //     });
+  //
+  //   return senses;
+  // }
 
   /**
    * Extract idioms from an entry
@@ -931,6 +930,34 @@ export class LongmanDictionaryService extends BaseDictionaryService<LongmanDicti
     return variants;
   }
 
+  private extractAudio(
+      $: cheerio.CheerioAPI,
+      head: Cheerio<Element>,
+      accent: string
+  ) : string | null {
+      accent = accent.toLowerCase() === 'br' ? 'br' : 'am';
+      const speaker = head.find(`.speaker.${accent}efile`);
+      if (speaker.length > 0){
+          const voiceSrc = $(speaker).attr('data-src-mp3');
+          if(!voiceSrc) return null;
+          const u = new URL(voiceSrc);
+          u.search = ""; // removes query parameters
+          return u.toString();
+      }
+      return null;
+  }
+
+    private extractVerbTense(
+        $: cheerio.CheerioAPI,
+        head: Cheerio<Element>
+    ) : string | null{
+        const element = $(head).find(`.Inflections`);
+        if (element.length > 0){
+            return $(element).text().trim().replace(/^\(+|\)+$/g, '');
+        }
+        return null;
+    }
+
   /**
    * Looks up a word in the Longman Learner's Dictionary
    * @param word The word to look up
@@ -957,32 +984,40 @@ export class LongmanDictionaryService extends BaseDictionaryService<LongmanDicti
       // Process each lexical category (part of speech) group
       $(".entry_content .dictionary .dictentry").each((entryIndex, entryElement) => {
 
-          const index = entryIndex;
-          const element = entryElement;
 
-          const senses = $(`${entryElement} .Sense`);
+          // const index = entryIndex;
+          // const element = entryElement;
+
+          const ldEntry = $(entryElement)
+              .find('.dictlink .ldoceEntry.Entry');
+
+          const head = $(ldEntry)
+              .find(`.frequent.Head`)
+              .first();
+
+          // Create a new dictionary entry
+          const entry: LongmanDictionaryEntry = {
+              id: `${word}-${entryIndex + 1}`,
+              word: word,
+              lexicalEntries: [],
+              language: "en",
+          };
+
+          const pron = $(head).find(`.PRON`).first().text();
+          const wordForm = $(head).find(`.POS`).first().text();
+
+          const verbTense = this.extractVerbTense($, head);
+
+          const british = this.extractAudio($, head, `br`);
+          const american = this.extractAudio($, head, `am`);
+
+          const senses = $(ldEntry)
+              .children(`.Sense`);
 
           $(senses).each((senseIndex, sense) => {
               const signPost = $(sense).find(".SIGNPOST").text().trim();
               const gram = $(sense).find(".GRAM").text().trim();
           });
-
-
-        // Get the headword
-        const headword =
-          $(entryElement)
-            .find(".webtop .headword, [hclass='headword']")
-            .first()
-            .text()
-            .trim() || word;
-
-        // Create a new dictionary entry
-        const entry: LongmanDictionaryEntry = {
-          id: `${headword}-${entryIndex + 1}`,
-          word: headword,
-          lexicalEntries: [],
-          language: "en",
-        };
 
         // Extract the lexical entries (by part of speech)
         // Longman HTML có thể có cấu trúc khác nhau, nên chúng ta kiểm tra cả hai trường hợp
@@ -1001,49 +1036,49 @@ export class LongmanDictionaryService extends BaseDictionaryService<LongmanDicti
 
           // Create a lexical entry
           const lexicalEntry: LongmanLexicalEntry = {
-            text: headword,
+            text: word,
             lexicalCategory,
             senses: [],
           };
 
           // Extract pronunciations
-          const pronunciations = this.extractPronunciation($, entryElement);
-          if (pronunciations.length > 0) {
-            lexicalEntry.pronunciations = pronunciations;
-          }
+          // const pronunciations = this.extractPronunciation($, entryElement);
+          // if (pronunciations.length > 0) {
+          //   lexicalEntry.pronunciations = pronunciations;
+          // }
 
           // Extract grammatical features
-          const grammaticalFeatures = this.extractGrammaticalFeatures(
-            $,
-            entryElement
-          );
-          if (grammaticalFeatures.length > 0) {
-            lexicalEntry.grammaticalFeatures = grammaticalFeatures;
-          }
+          // const grammaticalFeatures = this.extractGrammaticalFeatures(
+          //   $,
+          //   entryElement
+          // );
+          // if (grammaticalFeatures.length > 0) {
+          //   lexicalEntry.grammaticalFeatures = grammaticalFeatures;
+          // }
 
           // Extract etymology
-          const etymology = this.extractEtymology($, entryElement);
-          if (etymology) {
-            lexicalEntry.etymologies = [etymology];
-          }
+          // const etymology = this.extractEtymology($, entryElement);
+          // if (etymology) {
+          //   lexicalEntry.etymologies = [etymology];
+          // }
 
           // Extract senses
-          const sensesElement =
-            posContent.length > 0 ? posContent[0] : entryElement;
-          const senses = this.extractSenses($, sensesElement);
-          lexicalEntry.senses = senses;
+          // const sensesElement =
+          //   posContent.length > 0 ? posContent[0] : entryElement;
+          // const senses = this.extractSenses($, sensesElement);
+          // lexicalEntry.senses = senses;
 
           // Extract phrases and idioms
-          const phrases = this.extractIdioms($, entryElement);
-          if (phrases.length > 0) {
-            lexicalEntry.phrases = phrases;
-          }
+          // const phrases = this.extractIdioms($, entryElement);
+          // if (phrases.length > 0) {
+          //   lexicalEntry.phrases = phrases;
+          // }
 
           // Extract variant forms
-          const variantForms = this.extractVariantForms($, entryElement);
-          if (variantForms.length > 0) {
-            lexicalEntry.variantForms = variantForms;
-          }
+          // const variantForms = this.extractVariantForms($, entryElement);
+          // if (variantForms.length > 0) {
+          //   lexicalEntry.variantForms = variantForms;
+          // }
 
           entry.lexicalEntries.push(lexicalEntry);
         });

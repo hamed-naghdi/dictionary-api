@@ -21,12 +21,9 @@ export interface LongmanPronunciation {
  * Represents an example sentence for a definition
  */
 export interface LongmanExample {
-  /** The example sentence text */
+  html: string;
   text: string;
-  /** Source or attribution of the example */
-  source?: string;
-  /** Notes about usage context */
-  notes?: string;
+  audio?: string;
 }
 
 /**
@@ -160,8 +157,6 @@ export interface LongmanDictionaryEntry {
   lexicalEntries: LongmanLexicalEntry[];
   /** Language of the entry */
   language: string;
-  /** Type of word (e.g., 'headword', 'inflection') */
-  type?: string;
 }
 
 /**

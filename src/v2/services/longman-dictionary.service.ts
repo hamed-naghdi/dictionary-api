@@ -442,12 +442,12 @@ export class LongmanDictionaryService extends BaseDictionaryService<LongmanDicti
     const examples: LongmanExample[] = [];
 
     $(senseElem)
-      .find(".x")
+      .children('.EXAMPLE, .ColloExa')
       .each((_, exampleElem) => {
         const text = $(exampleElem).text().trim();
         if (!text) return;
 
-        // const example: LongmanExample = { text };
+        const example: LongmanExample = { text };
 
         // Check for source attribution
         // const source = $(exampleElem).find(".cf").text().trim();
@@ -461,7 +461,7 @@ export class LongmanDictionaryService extends BaseDictionaryService<LongmanDicti
         //   example.notes = notes;
         // }
 
-        // examples.push(example);
+        examples.push(example);
       });
 
     // Also check for extra examples in collapsible sections
@@ -993,64 +993,13 @@ export class LongmanDictionaryService extends BaseDictionaryService<LongmanDicti
                   synonyms: this.extractSyn($, senseElement),
                   opposites: this.extractOpp($, senseElement),
                   image: this.extractImage($, senseElement),
+                  examples: this.extractExamples($, senseElement),
               }
 
               if (this.hasMeaningfulValue(sense)) {
                   entry.senses.push(sense);
               }
           });
-
-        const posElements = $(entryElement).find(
-          "h2.pos-header, span.pos, [hclass='pos']"
-        );
-        posElements.each((_, posHeaderElement) => {
-
-
-          const posContent = $(posHeaderElement).closest(".top-g").siblings();
-
-
-
-          // Extract pronunciations
-          // const pronunciations = this.extractPronunciation($, entryElement);
-          // if (pronunciations.length > 0) {
-          //   lexicalEntry.pronunciations = pronunciations;
-          // }
-
-          // Extract grammatical features
-          // const grammaticalFeatures = this.extractGrammaticalFeatures(
-          //   $,
-          //   entryElement
-          // );
-          // if (grammaticalFeatures.length > 0) {
-          //   lexicalEntry.grammaticalFeatures = grammaticalFeatures;
-          // }
-
-          // Extract etymology
-          // const etymology = this.extractEtymology($, entryElement);
-          // if (etymology) {
-          //   lexicalEntry.etymologies = [etymology];
-          // }
-
-          // Extract senseElements
-          // const sensesElement =
-          //   posContent.length > 0 ? posContent[0] : entryElement;
-          // const senseElements = this.extractSenses($, sensesElement);
-          // lexicalEntry.senseElements = senseElements;
-
-          // Extract phrases and idioms
-          // const phrases = this.extractIdioms($, entryElement);
-          // if (phrases.length > 0) {
-          //   lexicalEntry.phrases = phrases;
-          // }
-
-          // Extract variant forms
-          // const variantForms = this.extractVariantForms($, entryElement);
-          // if (variantForms.length > 0) {
-          //   lexicalEntry.variantForms = variantForms;
-          // }
-
-          // entry.lexicalEntries.push(lexicalEntry);
-        });
 
         entries.push(entry);
       });

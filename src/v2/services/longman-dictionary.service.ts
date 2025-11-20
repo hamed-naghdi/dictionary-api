@@ -1,16 +1,11 @@
 import * as cheerio from "cheerio";
 import {Cheerio} from "cheerio";
 import {
-    LongmanDictionaryEntry,
     LongmanDictionaryResponse,
-    LongmanDomain,
-    LongmanEtymology,
+    LongmanEntry,
     LongmanExample,
-    LongmanGrammaticalFeatures,
-    LongmanLexicalCategory,
-    LongmanLexicalEntry,
     LongmanPronunciation,
-    LongmanRegion,
+    LongmanHead,
 } from "../types/longman";
 import {Element} from "domhandler";
 import {BaseDictionaryService} from "./base-dictionary.service";
@@ -62,11 +57,23 @@ export class LongmanDictionaryService extends BaseDictionaryService<LongmanDicti
    * @private
    */
   private async fetchLongmanHtml(word: string): Promise<cheerio.CheerioAPI> {
-    try {
+      function normalize(word: string): string {
+          return word
+              .trim()
+              .toLowerCase()
+              // remove apostrophes: ’ ' ` etc.
+              .replace(/['’`]/g, "")
+              // collapse multiple spaces into single
+              .replace(/\s+/g, " ")
+              // replace spaces with hyphens
+              .replace(/ /g, "-");
+      }
+
+      try {
       // Use Longman's direct search URL which automatically redirects to the correct word page
       const directSearchUrl = `${
         this.baseUrl
-      }/dictionary/${encodeURIComponent(word)}`;
+      }/dictionary/${encodeURIComponent(normalize(word))}`;
 
       console.log(
         `Fetching Longman definition with direct search URL: ${directSearchUrl}`
@@ -114,314 +121,313 @@ export class LongmanDictionaryService extends BaseDictionaryService<LongmanDicti
     );
   }
 
-  /**
-   * Extract pronunciation data from an element
-   * @param $ Cheerio instance
-   * @param element The element containing pronunciation
-   * @returns Pronunciation data
-   * @private
-   */ private extractPronunciation(
-    $: cheerio.CheerioAPI,
-    element: Element
-  ): LongmanPronunciation[] {
-    const pronunciations: LongmanPronunciation[] = [];
-
-    // Bước 1: Thu thập tất cả các audio URLs trước tiên
-    // Lưu trữ cả UK và US audio URLs và phiên âm tương ứng
-    interface AudioInfo {
-      url: string;
-      variant: string;
-      phonetic?: string;
-      formHint?: string; // Gợi ý về dạng của từ (do, does, did, done, doing)
-    }
-
-    // Tạo 2 arrays riêng biệt chứa audio URLs cho phát âm anh và mỹ
-    const ukAudios: AudioInfo[] = [];
-    const usAudios: AudioInfo[] = [];
-
-    // Tìm tất cả các phần tử audio và lưu trữ thông tin
-    $(element)
-      .find(".sound.audio_play_button.icon-audio")
-      .each((i, audioElem) => {
-        let mp3Url = $(audioElem).attr("data-src-mp3");
-
-        // Nếu không tìm thấy attr, thử lấy từ thuộc tính raw của element
-        if (!mp3Url) {
-          const outerHtml = $.html(audioElem);
-          const match = outerHtml.match(/data-src-mp3=(?:["'])?([^"'\s>]+)/i);
-          if (match && match[1]) {
-            mp3Url = match[1];
-          }
-        }
-
-        if (mp3Url) {
-          const absoluteUrl = this.makeAbsoluteUrl(mp3Url);
-
-          // Phân tích URL để tìm gợi ý về hình thức của từ
-          let formHint: string | undefined;
-          if (mp3Url) {
-            // Trích xuất tên file từ URL (ví dụ: "does__gb_2.mp3" -> "does")
-            const filenameMatch = mp3Url.match(
-              /\/([a-z]+)(?:__|\w*?)_(?:gb|us)/i
-            );
-            if (filenameMatch && filenameMatch[1]) {
-              formHint = filenameMatch[1].toLowerCase();
-              console.log(`Detected word form from URL: ${formHint}`);
-            }
-          }
-
-          // Tìm phiên âm gần nhất nếu có
-          let nearestPhonetic: string | undefined;
-          const nearestPhonElem = $(audioElem)
-            .closest(".pron-g")
-            .find(".phon")
-            .first();
-          if (nearestPhonElem.length > 0) {
-            nearestPhonetic = nearestPhonElem.text().trim();
-          }
-
-          // Tìm thêm context gần nhất để xác định hình thức từ
-          if (!formHint) {
-            const parentContext = $(audioElem)
-              .closest(".pron-g")
-              .text()
-              .toLowerCase();
-
-            // Kiểm tra các hình thức từ phổ biến
-            const wordForms = ["do", "does", "did", "done", "doing"];
-            for (const form of wordForms) {
-              if (parentContext.includes(form)) {
-                formHint = form;
-                console.log(`Detected word form from context: ${formHint}`);
-                break;
-              }
-            }
-          }
-
-          // Lưu vào mảng tương ứng
-          if ($(audioElem).hasClass("pron-uk")) {
-            ukAudios.push({
-              url: absoluteUrl ?? "",
-              variant: "British English",
-              phonetic: nearestPhonetic,
-              formHint,
-            });
-            console.log(
-              `UK Audio #${i}: ${absoluteUrl} (${
-                nearestPhonetic || "no phonetic"
-              }) - Form: ${formHint || "unknown"}`
-            );
-          } else if ($(audioElem).hasClass("pron-us")) {
-            usAudios.push({
-              url: absoluteUrl ?? "",
-              variant: "American English",
-              phonetic: nearestPhonetic,
-              formHint,
-            });
-            console.log(
-              `US Audio #${i}: ${absoluteUrl} (${
-                nearestPhonetic || "no phonetic"
-              }) - Form: ${formHint || "unknown"}`
-            );
-          } else {
-            // Các audio khác (không phân biệt UK/US)
-            ukAudios.push({
-              url: absoluteUrl ?? "",
-              variant: "Unknown",
-              phonetic: nearestPhonetic,
-              formHint,
-            });
-          }
-        }
-      });
-
-    // Bước 2: Chuyển qua các phiên âm, và liên kết chúng với audio URLs phù hợp
-    $(element)
-      .find(".phon")
-      .each((i, phonElem) => {
-        const phonetic = $(phonElem).text().trim();
-        if (!phonetic) return;
-
-        // Tìm audio URL phù hợp dựa trên vị trí gần nhất hoặc đánh dấu UK/US
-        let audioUrl: string | undefined;
-        let variant: string = "Unknown";
-
-        // Xác định biến thể UK/US dựa trên nội dung hoặc ngữ cảnh
-        const isUK =
-          phonetic.includes("BrE") ||
-          $(phonElem).closest(".pron-g").find(".pron-uk").length > 0;
-        const isUS =
-          phonetic.includes("NAmE") ||
-          $(phonElem).closest(".pron-g").find(".pron-us").length > 0;
-
-        // Phát hiện hình thức từ từ ngữ cảnh xung quanh phiên âm
-        const phonContext = $(phonElem).closest(".pron-g").text().toLowerCase();
-        let detectedForm: string | undefined;
-
-        // Các hình thức từ phổ biến để kiểm tra
-        const wordForms = ["do", "does", "did", "done", "doing"];
-        for (const form of wordForms) {
-          if (phonContext.includes(form)) {
-            detectedForm = form;
-            console.log(
-              `Found form ${form} in context of phonetic ${phonetic}`
-            );
-            break;
-          }
-        }
-
-        // Tìm audio phù hợp nhất cho phiên âm này
-        const audioArrays = isUK
-          ? [ukAudios]
-          : isUS
-          ? [usAudios]
-          : [ukAudios, usAudios];
-
-        // Chiến lược ghép nối 1: Tìm audio khớp với cả phiên âm và hình thức từ
-        for (const audioArray of audioArrays) {
-          if (audioUrl) break; // Nếu đã tìm thấy, dừng tìm kiếm
-
-          if (detectedForm) {
-            const formMatch = audioArray.find(
-              (a) => a.formHint === detectedForm
-            );
-            if (formMatch) {
-              audioUrl = formMatch.url;
-              variant = formMatch.variant;
-              console.log(
-                `Matched by word form: ${detectedForm} -> ${audioUrl}`
-              );
-              break;
-            }
-          }
-        }
-
-        // Chiến lược ghép nối 2: Sử dụng phiên âm để dự đoán hình thức từ
-        if (!audioUrl) {
-          // Một số phiên âm đặc trưng cho hình thức từ cụ thể
-          if (phonetic.includes("/duː/")) {
-            // Phiên âm cho "do" hoặc "does"
-            const doForm = audioArrays[0].find(
-              (a) => a.formHint === "do" || a.formHint === "does"
-            );
-            if (doForm) {
-              audioUrl = doForm.url;
-              variant = doForm.variant;
-              console.log(`Matched by phonetic pattern /duː/ -> ${audioUrl}`);
-            }
-          } else if (phonetic.includes("/dɪd/")) {
-            // Phiên âm cho "did"
-            const didForm = audioArrays[0].find((a) => a.formHint === "did");
-            if (didForm) {
-              audioUrl = didForm.url;
-              variant = didForm.variant;
-              console.log(`Matched by phonetic pattern /dɪd/ -> ${audioUrl}`);
-            }
-          } else if (phonetic.includes("/dʌn/")) {
-            // Phiên âm cho "done"
-            const doneForm = audioArrays[0].find((a) => a.formHint === "done");
-            if (doneForm) {
-              audioUrl = doneForm.url;
-              variant = doneForm.variant;
-              console.log(`Matched by phonetic pattern /dʌn/ -> ${audioUrl}`);
-            }
-          } else if (phonetic.includes("ˈduːɪŋ")) {
-            // Phiên âm cho "doing"
-            const doingForm = audioArrays[0].find(
-              (a) => a.formHint === "doing"
-            );
-            if (doingForm) {
-              audioUrl = doingForm.url;
-              variant = doingForm.variant;
-              console.log(
-                `Matched by phonetic pattern /ˈduːɪŋ/ -> ${audioUrl}`
-              );
-            }
-          }
-        }
-
-        // Chiến lược ghép nối 3: Tìm audio có cùng phiên âm
-        if (!audioUrl) {
-          for (const audioArray of audioArrays) {
-            const matchingAudio = audioArray.find(
-              (a) => a.phonetic === phonetic
-            );
-            if (matchingAudio) {
-              audioUrl = matchingAudio.url;
-              variant = matchingAudio.variant;
-              console.log(
-                `Matched by exact phonetic: ${phonetic} -> ${audioUrl}`
-              );
-              break;
-            }
-          }
-        }
-
-        // Chiến lược ghép nối 4: Fallback theo vị trí tương đối
-        if (!audioUrl) {
-          const primaryArray = isUK
-            ? ukAudios
-            : isUS
-            ? usAudios
-            : ukAudios.length > 0
-            ? ukAudios
-            : usAudios;
-          if (primaryArray.length > 0) {
-            audioUrl = primaryArray[i % primaryArray.length].url;
-            variant = isUK
-              ? "British English"
-              : isUS
-              ? "American English"
-              : primaryArray[i % primaryArray.length].variant;
-            console.log(
-              `Fallback match by position: index ${i} -> ${audioUrl}`
-            );
-          }
-        }
-
-        // Chiến lược ghép nối 5: Fallback cuối cùng - sử dụng URL đầu tiên có sẵn
-        if (!audioUrl) {
-          if (ukAudios.length > 0) {
-            audioUrl = ukAudios[0].url;
-            variant = "British English";
-          } else if (usAudios.length > 0) {
-            audioUrl = usAudios[0].url;
-            variant = "American English";
-          }
-          console.log(
-            `Last resort fallback: using first available audio URL -> ${audioUrl}`
-          );
-        }
-
-        // Tạo đối tượng phát âm
-        const pronunciation: LongmanPronunciation = {
-          phonetic,
-          audioUrl,
-          variant,
-        };
-
-        // Thêm ghi chú nếu có
-        const notes = $(phonElem)
-          .closest(".pron-g")
-          .find(".label")
-          .text()
-          .trim();
-        if (notes) {
-          pronunciation.notes = notes;
-        }
-
-        // Log kết quả cuối cùng để debug
-        console.log(
-          `Pronunciation: ${phonetic}, Audio: ${
-            audioUrl || "none"
-          }, Variant: ${variant}`
-        );
-
-        pronunciations.push(pronunciation);
-      });
-
-    return pronunciations;
-  }
+  // /**
+  //  * Extract pronunciation data from an element
+  //  * @param $ Cheerio instance
+  //  * @param element The element containing pronunciation
+  //  * @returns Pronunciation data
+  //  * @private
+  //  */ private extractPronunciation(
+  //   $: cheerio.CheerioAPI,
+  //   element: Element
+  // ): LongmanPronunciation[] {
+  //   const pronunciations: LongmanPronunciation[] = [];
+  //
+  //   // Bước 1: Thu thập tất cả các audio URLs trước tiên
+  //   // Lưu trữ cả UK và US audio URLs và phiên âm tương ứng
+  //   interface AudioInfo {
+  //     url: string;
+  //     variant: string;
+  //     phonetic?: string;
+  //     formHint?: string; // Gợi ý về dạng của từ (do, does, did, done, doing)
+  //   }
+  //
+  //   // Tạo 2 arrays riêng biệt chứa audio URLs cho phát âm anh và mỹ
+  //   const ukAudios: AudioInfo[] = [];
+  //   const usAudios: AudioInfo[] = [];
+  //
+  //   // Tìm tất cả các phần tử audio và lưu trữ thông tin
+  //   $(element)
+  //     .find(".sound.audio_play_button.icon-audio")
+  //     .each((i, audioElem) => {
+  //       let mp3Url = $(audioElem).attr("data-src-mp3");
+  //
+  //       // Nếu không tìm thấy attr, thử lấy từ thuộc tính raw của element
+  //       if (!mp3Url) {
+  //         const outerHtml = $.html(audioElem);
+  //         const match = outerHtml.match(/data-src-mp3=(?:["'])?([^"'\s>]+)/i);
+  //         if (match && match[1]) {
+  //           mp3Url = match[1];
+  //         }
+  //       }
+  //
+  //       if (mp3Url) {
+  //         const absoluteUrl = this.makeAbsoluteUrl(mp3Url);
+  //
+  //         // Phân tích URL để tìm gợi ý về hình thức của từ
+  //         let formHint: string | undefined;
+  //         if (mp3Url) {
+  //           // Trích xuất tên file từ URL (ví dụ: "does__gb_2.mp3" -> "does")
+  //           const filenameMatch = mp3Url.match(
+  //             /\/([a-z]+)(?:__|\w*?)_(?:gb|us)/i
+  //           );
+  //           if (filenameMatch && filenameMatch[1]) {
+  //             formHint = filenameMatch[1].toLowerCase();
+  //             console.log(`Detected word form from URL: ${formHint}`);
+  //           }
+  //         }
+  //
+  //         // Tìm phiên âm gần nhất nếu có
+  //         let nearestPhonetic: string | undefined;
+  //         const nearestPhonElem = $(audioElem)
+  //           .closest(".pron-g")
+  //           .find(".phon")
+  //           .first();
+  //         if (nearestPhonElem.length > 0) {
+  //           nearestPhonetic = nearestPhonElem.text().trim();
+  //         }
+  //
+  //         // Tìm thêm context gần nhất để xác định hình thức từ
+  //         if (!formHint) {
+  //           const parentContext = $(audioElem)
+  //             .closest(".pron-g")
+  //             .text()
+  //             .toLowerCase();
+  //
+  //           // Kiểm tra các hình thức từ phổ biến
+  //           const wordForms = ["do", "does", "did", "done", "doing"];
+  //           for (const form of wordForms) {
+  //             if (parentContext.includes(form)) {
+  //               formHint = form;
+  //               console.log(`Detected word form from context: ${formHint}`);
+  //               break;
+  //             }
+  //           }
+  //         }
+  //
+  //         // Lưu vào mảng tương ứng
+  //         if ($(audioElem).hasClass("pron-uk")) {
+  //           ukAudios.push({
+  //             url: absoluteUrl ?? "",
+  //             variant: "British English",
+  //             phonetic: nearestPhonetic,
+  //             formHint,
+  //           });
+  //           console.log(
+  //             `UK Audio #${i}: ${absoluteUrl} (${
+  //               nearestPhonetic || "no phonetic"
+  //             }) - Form: ${formHint || "unknown"}`
+  //           );
+  //         } else if ($(audioElem).hasClass("pron-us")) {
+  //           usAudios.push({
+  //             url: absoluteUrl ?? "",
+  //             variant: "American English",
+  //             phonetic: nearestPhonetic,
+  //             formHint,
+  //           });
+  //           console.log(
+  //             `US Audio #${i}: ${absoluteUrl} (${
+  //               nearestPhonetic || "no phonetic"
+  //             }) - Form: ${formHint || "unknown"}`
+  //           );
+  //         } else {
+  //           // Các audio khác (không phân biệt UK/US)
+  //           ukAudios.push({
+  //             url: absoluteUrl ?? "",
+  //             variant: "Unknown",
+  //             phonetic: nearestPhonetic,
+  //             formHint,
+  //           });
+  //         }
+  //       }
+  //     });
+  //
+  //
+  //   $(element)
+  //     .find(".phon")
+  //     .each((i, phonElem) => {
+  //       const phonetic = $(phonElem).text().trim();
+  //       if (!phonetic) return;
+  //
+  //       // Tìm audio URL phù hợp dựa trên vị trí gần nhất hoặc đánh dấu UK/US
+  //       let audioUrl: string | undefined;
+  //       let variant: string = "Unknown";
+  //
+  //       // Xác định biến thể UK/US dựa trên nội dung hoặc ngữ cảnh
+  //       const isUK =
+  //         phonetic.includes("BrE") ||
+  //         $(phonElem).closest(".pron-g").find(".pron-uk").length > 0;
+  //       const isUS =
+  //         phonetic.includes("NAmE") ||
+  //         $(phonElem).closest(".pron-g").find(".pron-us").length > 0;
+  //
+  //       // Phát hiện hình thức từ từ ngữ cảnh xung quanh phiên âm
+  //       const phonContext = $(phonElem).closest(".pron-g").text().toLowerCase();
+  //       let detectedForm: string | undefined;
+  //
+  //       // Các hình thức từ phổ biến để kiểm tra
+  //       const wordForms = ["do", "does", "did", "done", "doing"];
+  //       for (const form of wordForms) {
+  //         if (phonContext.includes(form)) {
+  //           detectedForm = form;
+  //           console.log(
+  //             `Found form ${form} in context of phonetic ${phonetic}`
+  //           );
+  //           break;
+  //         }
+  //       }
+  //
+  //       // Tìm audio phù hợp nhất cho phiên âm này
+  //       const audioArrays = isUK
+  //         ? [ukAudios]
+  //         : isUS
+  //         ? [usAudios]
+  //         : [ukAudios, usAudios];
+  //
+  //       // Chiến lược ghép nối 1: Tìm audio khớp với cả phiên âm và hình thức từ
+  //       for (const audioArray of audioArrays) {
+  //         if (audioUrl) break; // Nếu đã tìm thấy, dừng tìm kiếm
+  //
+  //         if (detectedForm) {
+  //           const formMatch = audioArray.find(
+  //             (a) => a.formHint === detectedForm
+  //           );
+  //           if (formMatch) {
+  //             audioUrl = formMatch.url;
+  //             variant = formMatch.variant;
+  //             console.log(
+  //               `Matched by word form: ${detectedForm} -> ${audioUrl}`
+  //             );
+  //             break;
+  //           }
+  //         }
+  //       }
+  //
+  //       // Chiến lược ghép nối 2: Sử dụng phiên âm để dự đoán hình thức từ
+  //       if (!audioUrl) {
+  //         // Một số phiên âm đặc trưng cho hình thức từ cụ thể
+  //         if (phonetic.includes("/duː/")) {
+  //           // Phiên âm cho "do" hoặc "does"
+  //           const doForm = audioArrays[0].find(
+  //             (a) => a.formHint === "do" || a.formHint === "does"
+  //           );
+  //           if (doForm) {
+  //             audioUrl = doForm.url;
+  //             variant = doForm.variant;
+  //             console.log(`Matched by phonetic pattern /duː/ -> ${audioUrl}`);
+  //           }
+  //         } else if (phonetic.includes("/dɪd/")) {
+  //           // Phiên âm cho "did"
+  //           const didForm = audioArrays[0].find((a) => a.formHint === "did");
+  //           if (didForm) {
+  //             audioUrl = didForm.url;
+  //             variant = didForm.variant;
+  //             console.log(`Matched by phonetic pattern /dɪd/ -> ${audioUrl}`);
+  //           }
+  //         } else if (phonetic.includes("/dʌn/")) {
+  //           // Phiên âm cho "done"
+  //           const doneForm = audioArrays[0].find((a) => a.formHint === "done");
+  //           if (doneForm) {
+  //             audioUrl = doneForm.url;
+  //             variant = doneForm.variant;
+  //             console.log(`Matched by phonetic pattern /dʌn/ -> ${audioUrl}`);
+  //           }
+  //         } else if (phonetic.includes("ˈduːɪŋ")) {
+  //           // Phiên âm cho "doing"
+  //           const doingForm = audioArrays[0].find(
+  //             (a) => a.formHint === "doing"
+  //           );
+  //           if (doingForm) {
+  //             audioUrl = doingForm.url;
+  //             variant = doingForm.variant;
+  //             console.log(
+  //               `Matched by phonetic pattern /ˈduːɪŋ/ -> ${audioUrl}`
+  //             );
+  //           }
+  //         }
+  //       }
+  //
+  //       // Chiến lược ghép nối 3: Tìm audio có cùng phiên âm
+  //       if (!audioUrl) {
+  //         for (const audioArray of audioArrays) {
+  //           const matchingAudio = audioArray.find(
+  //             (a) => a.phonetic === phonetic
+  //           );
+  //           if (matchingAudio) {
+  //             audioUrl = matchingAudio.url;
+  //             variant = matchingAudio.variant;
+  //             console.log(
+  //               `Matched by exact phonetic: ${phonetic} -> ${audioUrl}`
+  //             );
+  //             break;
+  //           }
+  //         }
+  //       }
+  //
+  //       // Chiến lược ghép nối 4: Fallback theo vị trí tương đối
+  //       if (!audioUrl) {
+  //         const primaryArray = isUK
+  //           ? ukAudios
+  //           : isUS
+  //           ? usAudios
+  //           : ukAudios.length > 0
+  //           ? ukAudios
+  //           : usAudios;
+  //         if (primaryArray.length > 0) {
+  //           audioUrl = primaryArray[i % primaryArray.length].url;
+  //           variant = isUK
+  //             ? "British English"
+  //             : isUS
+  //             ? "American English"
+  //             : primaryArray[i % primaryArray.length].variant;
+  //           console.log(
+  //             `Fallback match by position: index ${i} -> ${audioUrl}`
+  //           );
+  //         }
+  //       }
+  //
+  //       // Chiến lược ghép nối 5: Fallback cuối cùng - sử dụng URL đầu tiên có sẵn
+  //       if (!audioUrl) {
+  //         if (ukAudios.length > 0) {
+  //           audioUrl = ukAudios[0].url;
+  //           variant = "British English";
+  //         } else if (usAudios.length > 0) {
+  //           audioUrl = usAudios[0].url;
+  //           variant = "American English";
+  //         }
+  //         console.log(
+  //           `Last resort fallback: using first available audio URL -> ${audioUrl}`
+  //         );
+  //       }
+  //
+  //       const pronunciation: LongmanPronunciation = {
+  //         phonetic,
+  //         audioUrl,
+  //         variant,
+  //       };
+  //
+  //       // Thêm ghi chú nếu có
+  //       const notes = $(phonElem)
+  //         .closest(".pron-g")
+  //         .find(".label")
+  //         .text()
+  //         .trim();
+  //       if (notes) {
+  //         pronunciation.notes = notes;
+  //       }
+  //
+  //       // Log kết quả cuối cùng để debug
+  //       console.log(
+  //         `Pronunciation: ${phonetic}, Audio: ${
+  //           audioUrl || "none"
+  //         }, Variant: ${variant}`
+  //       );
+  //
+  //       pronunciations.push(pronunciation);
+  //     });
+  //
+  //   return pronunciations;
+  // }
 
   /**
    * Extract examples from a sense block
@@ -473,247 +479,35 @@ export class LongmanDictionaryService extends BaseDictionaryService<LongmanDicti
   }
 
   // /**
-  //  * Extract register information (formal, informal, etc.)
+  //  * Extract synonyms from a sense
   //  * @param $ Cheerio instance
   //  * @param element The element to extract from
-  //  * @returns Array of register information
+  //  * @returns Array of synonyms or undefined
   //  * @private
   //  */
-  // private extractRegisters(
+  // private extractSynonyms(
   //   $: cheerio.CheerioAPI,
   //   element: Element
-  // ): LongmanRegister[] {
-  //   const registers: LongmanRegister[] = [];
+  // ): string[] | undefined {
+  //   const synonyms: string[] = [];
   //
-  //   // Look for register labels
+  //   // Check for synonyms in the unbox sections
   //   $(element)
-  //     .find(".grammar")
-  //     .each((_, grammarElem) => {
-  //       const text = $(grammarElem).text().trim();
-  //       if (!text) return;
+  //     .find('.unbox[unbox="synonyms"] .body .unbox')
+  //     .each((_, synElem) => {
+  //       const text = $(synElem).text().trim();
+  //       if (!text || text === "example") return;
   //
-  //       // Some common register types
-  //       const registerTypes = [
-  //         "formal",
-  //         "informal",
-  //         "slang",
-  //         "literary",
-  //         "humorous",
-  //         "technical",
-  //       ];
-  //       const lowerText = text.toLowerCase();
-  //
-  //       for (const type of registerTypes) {
-  //         if (lowerText.includes(type)) {
-  //           registers.push({
-  //             type,
-  //             notes: text,
-  //           });
-  //           break;
-  //         }
-  //       }
-  //
-  //       // If no specific type identified but it's a register note
-  //       if (
-  //         registers.length === 0 &&
-  //         (lowerText.includes("used") || lowerText.includes("style"))
-  //       ) {
-  //         registers.push({ type: "other", notes: text });
-  //       }
+  //       // Split by bullet separator and trim each item
+  //       const syns = text
+  //         .split("▪")
+  //         .map((s) => s.trim())
+  //         .filter(Boolean);
+  //       synonyms.push(...syns);
   //     });
   //
-  //   return registers;
+  //   return synonyms.length > 0 ? synonyms : undefined;
   // }
-
-  /**
-   * Extract domain information (subject field)
-   * @param $ Cheerio instance
-   * @param element The element to extract from
-   * @returns Array of domain information
-   * @private
-   */
-  private extractDomains(
-    $: cheerio.CheerioAPI,
-    element: Element
-  ): LongmanDomain[] {
-    const domains: LongmanDomain[] = [];
-
-    $(element)
-      .find(".domain")
-      .each((_, domainElem) => {
-        const text = $(domainElem).text().trim();
-        if (text) {
-          // Create a simple ID from the text
-          const id = text.toLowerCase().replace(/[^a-z0-9]/g, "_");
-          domains.push({ id, text });
-        }
-      });
-
-    return domains;
-  }
-
-  /**
-   * Extract region information
-   * @param $ Cheerio instance
-   * @param element The element to extract from
-   * @returns Array of region information
-   * @private
-   */
-  private extractRegions(
-    $: cheerio.CheerioAPI,
-    element: Element
-  ): LongmanRegion[] {
-    const regions: LongmanRegion[] = [];
-
-    $(element)
-      .find(".region")
-      .each((_, regionElem) => {
-        const text = $(regionElem).text().trim();
-        if (text) {
-          // Create a simple ID from the text
-          const id = text.toLowerCase().replace(/[^a-z0-9]/g, "_");
-          regions.push({ id, text });
-        }
-      });
-
-    return regions;
-  }
-
-  /**
-   * Extract a lexical category (part of speech)
-   * @param $ Cheerio instance
-   * @param element The element to extract from
-   * @returns Lexical category information
-   * @private
-   */
-  private extractLexicalCategory(
-    $: cheerio.CheerioAPI,
-    element: Element
-  ): LongmanLexicalCategory {
-    const text = $(element).find(".pos").text().trim();
-    // Create a simple ID from the text
-    const id = text.toLowerCase().replace(/[^a-z0-9]/g, "_");
-
-    return { id, text };
-  }
-
-  /**
-   * Extract grammatical features
-   * @param $ Cheerio instance
-   * @param element The element to extract from
-   * @returns Array of grammatical features
-   * @private
-   */
-  private extractGrammaticalFeatures(
-    $: cheerio.CheerioAPI,
-    element: Element
-  ): LongmanGrammaticalFeatures[] {
-    const features: LongmanGrammaticalFeatures[] = [];
-
-    // Extract countability for nouns
-    if ($(element).find(".pos").text().trim().toLowerCase() === "noun") {
-      const grammarText = $(element)
-        .find(".grammar")
-        .text()
-        .trim()
-        .toLowerCase();
-
-      if (grammarText.includes("countable")) {
-        features.push({ type: "countability", value: "countable" });
-      } else if (grammarText.includes("uncountable")) {
-        features.push({ type: "countability", value: "uncountable" });
-      } else if (grammarText.includes("singular")) {
-        features.push({ type: "number", value: "singular" });
-      } else if (grammarText.includes("plural")) {
-        features.push({ type: "number", value: "plural" });
-      }
-    }
-
-    // Extract transitivity for verbs
-    if ($(element).find(".pos").text().trim().toLowerCase() === "verb") {
-      const grammarText = $(element)
-        .find(".grammar")
-        .text()
-        .trim()
-        .toLowerCase();
-
-      if (grammarText.includes("transitive")) {
-        features.push({ type: "transitivity", value: "transitive" });
-      } else if (grammarText.includes("intransitive")) {
-        features.push({ type: "transitivity", value: "intransitive" });
-      }
-    }
-
-    return features;
-  }
-
-  /**
-   * Extract etymology information
-   * @param $ Cheerio instance
-   * @param element The element to extract from
-   * @returns Etymology information or undefined
-   * @private
-   */
-  private extractEtymology(
-    $: cheerio.CheerioAPI,
-    element: Element
-  ): LongmanEtymology | undefined {
-    // Look for etymology in Word Origin section
-    const etymologyBox = $(element).find('.unbox[unbox="wordorigin"] .body');
-    if (etymologyBox.length === 0) return undefined;
-
-    const text = etymologyBox.text().trim();
-    if (!text) return undefined;
-
-    const etymology: LongmanEtymology = { text };
-
-    // Try to extract language of origin
-    const languageMatches = text.match(/from\s+([A-Z][a-z]+)(?:\s|,|\.|$)/);
-    if (languageMatches && languageMatches[1]) {
-      etymology.language = languageMatches[1];
-    }
-
-    // Try to extract period information
-    const periodMatches = text.match(
-      /(?:Old|Middle|Late|Modern|Ancient)\s+[A-Z][a-z]+/g
-    );
-    if (periodMatches && periodMatches.length > 0) {
-      etymology.period = periodMatches[0];
-    }
-
-    return etymology;
-  }
-
-  /**
-   * Extract synonyms from a sense
-   * @param $ Cheerio instance
-   * @param element The element to extract from
-   * @returns Array of synonyms or undefined
-   * @private
-   */
-  private extractSynonyms(
-    $: cheerio.CheerioAPI,
-    element: Element
-  ): string[] | undefined {
-    const synonyms: string[] = [];
-
-    // Check for synonyms in the unbox sections
-    $(element)
-      .find('.unbox[unbox="synonyms"] .body .unbox')
-      .each((_, synElem) => {
-        const text = $(synElem).text().trim();
-        if (!text || text === "example") return;
-
-        // Split by bullet separator and trim each item
-        const syns = text
-          .split("▪")
-          .map((s) => s.trim())
-          .filter(Boolean);
-        synonyms.push(...syns);
-      });
-
-    return synonyms.length > 0 ? synonyms : undefined;
-  }
 
   // /**
   //  * Extract subsenses from a sense block
@@ -861,101 +655,158 @@ export class LongmanDictionaryService extends BaseDictionaryService<LongmanDicti
   //   return senses;
   // }
 
-  /**
-   * Extract idioms from an entry
-   * @param $ Cheerio instance
-   * @param entry The entry element
-   * @returns Array of phrases (idioms)
-   * @private
-   */
-  private extractIdioms(
-    $: cheerio.CheerioAPI,
-    entry: Element
-  ): { text: string; explanation?: string }[] {
-    const idioms: { text: string; explanation?: string }[] = [];
+  // /**
+  //  * Extract idioms from an entry
+  //  * @param $ Cheerio instance
+  //  * @param entry The entry element
+  //  * @returns Array of phrases (idioms)
+  //  * @private
+  //  */
+  // private extractIdioms(
+  //   $: cheerio.CheerioAPI,
+  //   entry: Element
+  // ): { text: string; explanation?: string }[] {
+  //   const idioms: { text: string; explanation?: string }[] = [];
+  //
+  //   $(entry)
+  //     .find(".idioms .idm-g")
+  //     .each((_, idiomElem) => {
+  //       const text = $(idiomElem).find(".idm").text().trim();
+  //       if (!text) return;
+  //
+  //       const explanation = $(idiomElem).find(".def").text().trim();
+  //
+  //       idioms.push({
+  //         text,
+  //         ...(explanation ? { explanation } : {}),
+  //       });
+  //     });
+  //
+  //   return idioms;
+  // }
 
-    $(entry)
-      .find(".idioms .idm-g")
-      .each((_, idiomElem) => {
-        const text = $(idiomElem).find(".idm").text().trim();
-        if (!text) return;
+  // /**
+  //  * Extract variant forms
+  //  * @param $ Cheerio instance
+  //  * @param element The element to extract from
+  //  * @returns Array of variant forms
+  //  * @private
+  //  */
+  // private extractVariantForms(
+  //   $: cheerio.CheerioAPI,
+  //   element: Element
+  // ): { text: string; notes?: string[] }[] {
+  //   const variants: { text: string; notes?: string[] }[] = [];
+  //
+  //   $(element)
+  //     .find(".variants")
+  //     .each((_, variantElem) => {
+  //       const text = $(variantElem).text().trim();
+  //       if (!text) return;
+  //
+  //       // Extract notes if any
+  //       const notes: string[] = [];
+  //       $(variantElem)
+  //         .find(".label")
+  //         .each((_, labelElem) => {
+  //           const labelText = $(labelElem).text().trim();
+  //           if (labelText) {
+  //             notes.push(labelText);
+  //           }
+  //         });
+  //
+  //       variants.push({
+  //         text,
+  //         ...(notes.length > 0 ? { notes } : {}),
+  //       });
+  //     });
+  //
+  //   return variants;
+  // }
 
-        const explanation = $(idiomElem).find(".def").text().trim();
+    private extractHyphenation(
+        $: cheerio.CheerioAPI,
+        head: Cheerio<Element>) : string {
+      const element = $(head).find(`.HYPHENATION`);
+      if (element.length > 0) {
+          return element.text().trim();
+      } else {
+          return $(head).find(`.PHRVBHWD`).text().trim();
+      }
+    }
 
-        idioms.push({
-          text,
-          ...(explanation ? { explanation } : {}),
-        });
-      });
+    private extractPronunciation(
+        $: cheerio.CheerioAPI,
+        head: Cheerio<Element>
+    ) : LongmanPronunciation | undefined{
+        const pron = this.extractPron($, head);
+        const british = this.extractAudio($, head, `br`);
+        const american = this.extractAudio($, head, `am`);
+        return {
+            phonetic: pron,
+            britishAudioUrl: british,
+            americanAudioUrl: american,
+        }
+    }
 
-    return idioms;
-  }
+    private extractPron(
+        $: cheerio.CheerioAPI,
+        head: Cheerio<Element>
+    ) : string | undefined {
+        const element = $(head).find(`.PRON`);
+        if (element.length > 0) {
+            return element.text().trim();
+        }
+        return undefined;
+    }
 
-  /**
-   * Extract variant forms
-   * @param $ Cheerio instance
-   * @param element The element to extract from
-   * @returns Array of variant forms
-   * @private
-   */
-  private extractVariantForms(
-    $: cheerio.CheerioAPI,
-    element: Element
-  ): { text: string; notes?: string[] }[] {
-    const variants: { text: string; notes?: string[] }[] = [];
-
-    $(element)
-      .find(".variants")
-      .each((_, variantElem) => {
-        const text = $(variantElem).text().trim();
-        if (!text) return;
-
-        // Extract notes if any
-        const notes: string[] = [];
-        $(variantElem)
-          .find(".label")
-          .each((_, labelElem) => {
-            const labelText = $(labelElem).text().trim();
-            if (labelText) {
-              notes.push(labelText);
-            }
-          });
-
-        variants.push({
-          text,
-          ...(notes.length > 0 ? { notes } : {}),
-        });
-      });
-
-    return variants;
-  }
-
-  private extractAudio(
+    private extractAudio(
       $: cheerio.CheerioAPI,
       head: Cheerio<Element>,
       accent: string
-  ) : string | null {
+    ) : string | undefined {
       accent = accent.toLowerCase() === 'br' ? 'br' : 'am';
       const speaker = head.find(`.speaker.${accent}efile`);
       if (speaker.length > 0){
           const voiceSrc = $(speaker).attr('data-src-mp3');
-          if(!voiceSrc) return null;
+          if(!voiceSrc) return undefined;
           const u = new URL(voiceSrc);
           u.search = ""; // removes query parameters
           return u.toString();
       }
-      return null;
-  }
+      return undefined;
+    }
 
-    private extractVerbTense(
+    private extractWordForms(
         $: cheerio.CheerioAPI,
         head: Cheerio<Element>
-    ) : string | null{
+    ) : string | undefined {
         const element = $(head).find(`.Inflections`);
         if (element.length > 0){
             return $(element).text().trim().replace(/^\(+|\)+$/g, '');
         }
-        return null;
+        return undefined;
+    }
+
+    private extractPosition(
+        $: cheerio.CheerioAPI,
+        head: Cheerio<Element>
+    ) : string {
+        const element = $(head).find(`.POS`);
+        return $(element).text().trim();
+    }
+
+    private extractGrammar(
+        $: cheerio.CheerioAPI,
+        head: Cheerio<Element>
+    ) : string | undefined {
+        const element = $(head).find(`.GRAM`);
+        if (element.length > 0) {
+            const raw = element.text().trim(); // e.g. "[transitive]"
+            const cleaned = raw.replace(/\[|\]/g, "").trim(); // → "transitive"
+            return cleaned || undefined;
+        }
+        return undefined;
     }
 
   /**
@@ -965,7 +816,6 @@ export class LongmanDictionaryService extends BaseDictionaryService<LongmanDicti
    */
   async lookupWord(word: string): Promise<LongmanDictionaryResponse> {
     try {
-      // Sử dụng fetchLongmanHtml để xử lý việc chuyển hướng URL và lấy nội dung trang
       const $ = await this.fetchLongmanHtml(word);
 
       // Check if the word was found
@@ -979,7 +829,7 @@ export class LongmanDictionaryService extends BaseDictionaryService<LongmanDicti
         };
       }
 
-      const entries: LongmanDictionaryEntry[] = [];
+      const entries: LongmanEntry[] = [];
 
       // Process each lexical category (part of speech) group
       $(".entry_content .dictionary .dictentry").each((entryIndex, entryElement) => {
@@ -989,57 +839,45 @@ export class LongmanDictionaryService extends BaseDictionaryService<LongmanDicti
           // const element = entryElement;
 
           const ldEntry = $(entryElement)
-              .find('.dictlink .ldoceEntry.Entry');
+              .find('.dictlink .Entry');
 
-          const head = $(ldEntry)
-              .find(`.frequent.Head`)
+          const headElement = $(ldEntry)
+              .find(`.Head`)
               .first();
 
-          // Create a new dictionary entry
-          const entry: LongmanDictionaryEntry = {
-              id: `${word}-${entryIndex + 1}`,
-              word: word,
-              lexicalEntries: [],
-              language: "en",
+          const head : LongmanHead = {
+              hyphenation: this.extractHyphenation($, headElement),
+              pronunciation: this.extractPronunciation($, headElement),
+              position: this.extractPosition($, headElement),
+              wordForms: this.extractWordForms($, headElement),
+              grammar: this.extractGrammar($, headElement),
           };
-
-          const pron = $(head).find(`.PRON`).first().text();
-          const wordForm = $(head).find(`.POS`).first().text();
-
-          const verbTense = this.extractVerbTense($, head);
-
-          const british = this.extractAudio($, head, `br`);
-          const american = this.extractAudio($, head, `am`);
 
           const senses = $(ldEntry)
               .children(`.Sense`);
+
+          // Create a new dictionary entry
+          const entry: LongmanEntry = {
+              id: `${word}-${entryIndex + 1}`,
+              head: head,
+              senses: []
+          };
+
 
           $(senses).each((senseIndex, sense) => {
               const signPost = $(sense).find(".SIGNPOST").text().trim();
               const gram = $(sense).find(".GRAM").text().trim();
           });
 
-        // Extract the lexical entries (by part of speech)
-        // Longman HTML có thể có cấu trúc khác nhau, nên chúng ta kiểm tra cả hai trường hợp
-        // Tìm cả pos-header và span.pos trực tiếp
         const posElements = $(entryElement).find(
           "h2.pos-header, span.pos, [hclass='pos']"
         );
         posElements.each((_, posHeaderElement) => {
-          const lexicalCategory = this.extractLexicalCategory(
-            $,
-            posHeaderElement
-          );
 
-          // Find the section of content for this part of speech
+
           const posContent = $(posHeaderElement).closest(".top-g").siblings();
 
-          // Create a lexical entry
-          const lexicalEntry: LongmanLexicalEntry = {
-            text: word,
-            lexicalCategory,
-            senses: [],
-          };
+
 
           // Extract pronunciations
           // const pronunciations = this.extractPronunciation($, entryElement);
@@ -1080,13 +918,10 @@ export class LongmanDictionaryService extends BaseDictionaryService<LongmanDicti
           //   lexicalEntry.variantForms = variantForms;
           // }
 
-          entry.lexicalEntries.push(lexicalEntry);
+          // entry.lexicalEntries.push(lexicalEntry);
         });
 
-        // Only add entries with lexical entries
-        if (entry.lexicalEntries.length > 0) {
-          entries.push(entry);
-        }
+        entries.push(entry);
       });
 
       // If no entries were found but the page loaded, might be a redirect or special case

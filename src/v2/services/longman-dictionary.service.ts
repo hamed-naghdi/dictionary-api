@@ -5,7 +5,7 @@ import {
     LongmanEntry,
     LongmanExample,
     LongmanPronunciation,
-    LongmanHead,
+    LongmanHead, LongmanSense,
 } from "../types/longman";
 import {Element} from "domhandler";
 import {BaseDictionaryService} from "./base-dictionary.service";
@@ -70,7 +70,6 @@ export class LongmanDictionaryService extends BaseDictionaryService<LongmanDicti
       }
 
       try {
-      // Use Longman's direct search URL which automatically redirects to the correct word page
       const directSearchUrl = `${
         this.baseUrl
       }/dictionary/${encodeURIComponent(normalize(word))}`;
@@ -79,7 +78,7 @@ export class LongmanDictionaryService extends BaseDictionaryService<LongmanDicti
         `Fetching Longman definition with direct search URL: ${directSearchUrl}`
       );
 
-      const $ = await super.fetchHtml(directSearchUrl); // Sử dụng fetchHtml mặc định
+      const $ = await super.fetchHtml(directSearchUrl);
 
       // Check if we got a valid page with dictionary content
       if ($(".entry_content").length > 0) {
@@ -724,49 +723,56 @@ export class LongmanDictionaryService extends BaseDictionaryService<LongmanDicti
   //   return variants;
   // }
 
+    private hasMeaningfulValue(obj: Record<string, any>): boolean {
+        return Object.values(obj).some(
+            v => v !== undefined && v !== null && !(Array.isArray(v) && v.length === 0)
+        );
+    }
+
     private extractHyphenation(
         $: cheerio.CheerioAPI,
-        head: Cheerio<Element>) : string {
-      const element = $(head).find(`.HYPHENATION`);
-      if (element.length > 0) {
-          return element.text().trim();
+        element: Cheerio<Element>) : string {
+      const el = $(element).find(`.HYPHENATION`);
+      if (el.length > 0) {
+          return el.text().trim();
       } else {
-          return $(head).find(`.PHRVBHWD`).text().trim();
+          return $(element).find(`.PHRVBHWD`).text().trim();
       }
     }
 
     private extractPronunciation(
         $: cheerio.CheerioAPI,
-        head: Cheerio<Element>
+        element: Cheerio<Element>
     ) : LongmanPronunciation | undefined{
-        const pron = this.extractPron($, head);
-        const british = this.extractAudio($, head, `br`);
-        const american = this.extractAudio($, head, `am`);
-        return {
+        const pron = this.extractPron($, element);
+        const british = this.extractAudio($, element, `br`);
+        const american = this.extractAudio($, element, `am`);
+        const result : LongmanPronunciation = {
             phonetic: pron,
             britishAudioUrl: british,
             americanAudioUrl: american,
         }
+        return this.hasMeaningfulValue(result) ? result : undefined;
     }
 
     private extractPron(
         $: cheerio.CheerioAPI,
-        head: Cheerio<Element>
+        element: Cheerio<Element>
     ) : string | undefined {
-        const element = $(head).find(`.PRON`);
-        if (element.length > 0) {
-            return element.text().trim();
+        const el = $(element).find(`.PRON`);
+        if (el.length > 0) {
+            return el.text().trim();
         }
         return undefined;
     }
 
     private extractAudio(
       $: cheerio.CheerioAPI,
-      head: Cheerio<Element>,
+      element: Cheerio<Element>,
       accent: string
     ) : string | undefined {
       accent = accent.toLowerCase() === 'br' ? 'br' : 'am';
-      const speaker = head.find(`.speaker.${accent}efile`);
+      const speaker = element.find(`.speaker.${accent}efile`);
       if (speaker.length > 0){
           const voiceSrc = $(speaker).attr('data-src-mp3');
           if(!voiceSrc) return undefined;
@@ -779,32 +785,146 @@ export class LongmanDictionaryService extends BaseDictionaryService<LongmanDicti
 
     private extractWordForms(
         $: cheerio.CheerioAPI,
-        head: Cheerio<Element>
-    ) : string | undefined {
-        const element = $(head).find(`.Inflections`);
-        if (element.length > 0){
-            return $(element).text().trim().replace(/^\(+|\)+$/g, '');
-        }
-        return undefined;
+        element: Cheerio<Element>
+    ): string | undefined {
+        const el = $(element).find(".Inflections");
+        if (el.length === 0) return undefined;
+
+        let text = $(el).text().trim();
+
+        text = text.replace(/^\(+|\)+$/g, '').trim();
+
+        const regex = /([a-zA-Z\s]+)\s+([^\s,]+)/g;
+
+        text = text.replace(regex, (_, label, word) => {
+            return `${label} <strong>${word}</strong>`;
+        });
+
+        return text;
     }
 
     private extractPosition(
         $: cheerio.CheerioAPI,
-        head: Cheerio<Element>
+        element: Cheerio<Element>
     ) : string {
-        const element = $(head).find(`.POS`);
-        return $(element).text().trim();
+        const el = $(element).find(`.POS`);
+        return $(el).text().trim();
     }
 
     private extractGrammar(
         $: cheerio.CheerioAPI,
-        head: Cheerio<Element>
+        element: Cheerio<Element>
     ) : string | undefined {
-        const element = $(head).find(`.GRAM`);
-        if (element.length > 0) {
-            const raw = element.text().trim(); // e.g. "[transitive]"
+        const el = $(element).find(`.GRAM`);
+        if (el.length > 0) {
+            const raw = el.text().trim(); // e.g. "[transitive]"
             const cleaned = raw.replace(/\[|\]/g, "").trim(); // → "transitive"
             return cleaned || undefined;
+        }
+        return undefined;
+    }
+
+    private extractDefinition(
+        $: cheerio.CheerioAPI,
+        element: Element
+    ) : string | undefined {
+        const el = $(element).find(`.DEF`);
+        if (el.length > 0) {
+            return  el.text().trim();
+        }
+        return undefined;
+    }
+
+    private extractSignPost(
+        $: cheerio.CheerioAPI,
+        element: Element
+    ) : string | undefined {
+        const el = $(element).find(`.SIGNPOST`);
+        if (el.length > 0) {
+            return  el.text().trim();
+        }
+        return undefined;
+    }
+
+    private extractRef(
+        $: cheerio.CheerioAPI,
+        element: Element
+    ) : string | undefined {
+        const el = $(element).find(`.REFHWD`);
+        if (el.length > 0) {
+            return  el.text().trim();
+        }
+        return undefined;
+    }
+
+    private extractLexUnit(
+        $: cheerio.CheerioAPI,
+        element: Element
+    ) : string | undefined {
+        const el = $(element).find(`.LEXUNIT`);
+        if (el.length > 0) {
+            return  el.text().trim();
+        }
+        return undefined;
+    }
+
+    private extractRegister(
+        $: cheerio.CheerioAPI,
+        element: Element
+    ) : string | undefined {
+        const el = $(element).find(`.REGISTERLAB`);
+        if (el.length > 0) {
+            return  el.text().trim();
+        }
+        return undefined;
+    }
+
+    private extractSynOpp(
+        $: cheerio.CheerioAPI,
+        synElements: Cheerio<Element>): string[] | undefined{
+        if (synElements.length === 0) {
+            return undefined;
+        }
+        const results: string[] = [];
+        synElements.each((_, el) => {
+            const clone = $(el).clone();
+            clone.find(".synopp").remove();
+            const text = clone.text().trim();
+            if (text) {
+                results.push(text);
+            }
+        });
+
+        return results.length > 0 ? results : undefined;
+    }
+
+    private extractSyn(
+        $: cheerio.CheerioAPI,
+        element: Element
+    ): string[] | undefined {
+        const synElements = $(element).find(".SYN");
+        return this.extractSynOpp($, synElements);
+    }
+
+    private extractOpp(
+        $: cheerio.CheerioAPI,
+        element: Element
+    ): string[] | undefined {
+        const synElements = $(element).find(".OPP");
+        return this.extractSynOpp($, synElements);
+    }
+
+    private extractImage(
+        $: cheerio.CheerioAPI,
+        element: Element
+    ) : string | undefined {
+        const image = $(element).find(`img`);
+        if (image.length > 0){
+            const src = $(image).attr('src');
+            if(!src) return undefined;
+            const u = new URL(src);
+            u.search = ""; // removes query parameters
+            return u.toString();
         }
         return undefined;
     }
@@ -853,20 +973,31 @@ export class LongmanDictionaryService extends BaseDictionaryService<LongmanDicti
               grammar: this.extractGrammar($, headElement),
           };
 
-          const senses = $(ldEntry)
-              .children(`.Sense`);
-
           // Create a new dictionary entry
           const entry: LongmanEntry = {
-              id: `${word}-${entryIndex + 1}`,
               head: head,
               senses: []
           };
 
+          const senseElements = $(ldEntry)
+              .children(`.Sense`);
 
-          $(senses).each((senseIndex, sense) => {
-              const signPost = $(sense).find(".SIGNPOST").text().trim();
-              const gram = $(sense).find(".GRAM").text().trim();
+          $(senseElements).each((_, senseElement) => {
+              const sense: LongmanSense = {
+                  definition: this.extractDefinition($, senseElement),
+                  signpost: this.extractSignPost($, senseElement),
+                  ref: this.extractRef($, senseElement),
+                  lexUnit: this.extractLexUnit($, senseElement),
+                  grammar: this.extractGrammar($, $(senseElement)),
+                  register: this.extractRegister($, senseElement),
+                  synonyms: this.extractSyn($, senseElement),
+                  opposites: this.extractOpp($, senseElement),
+                  image: this.extractImage($, senseElement),
+              }
+
+              if (this.hasMeaningfulValue(sense)) {
+                  entry.senses.push(sense);
+              }
           });
 
         const posElements = $(entryElement).find(
@@ -900,11 +1031,11 @@ export class LongmanDictionaryService extends BaseDictionaryService<LongmanDicti
           //   lexicalEntry.etymologies = [etymology];
           // }
 
-          // Extract senses
+          // Extract senseElements
           // const sensesElement =
           //   posContent.length > 0 ? posContent[0] : entryElement;
-          // const senses = this.extractSenses($, sensesElement);
-          // lexicalEntry.senses = senses;
+          // const senseElements = this.extractSenses($, sensesElement);
+          // lexicalEntry.senseElements = senseElements;
 
           // Extract phrases and idioms
           // const phrases = this.extractIdioms($, entryElement);

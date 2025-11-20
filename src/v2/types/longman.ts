@@ -39,20 +39,22 @@ export interface LongmanExample {
  * Represents a single definition (sense) of a word
  */
 export interface LongmanSense {
+  definition?: string;
   signpost?: string;
+  ref?: string;
+  lexUnit?: string;
   grammar?: string;
-  definition: string;
-  examples?: LongmanExample[];
+  register?: string;
   synonyms?: string[];
   opposites?: string[];
   image?: string;
+  examples?: LongmanExample[];
 }
 
 /**
  * Represents a lexical entry (grouping of senses with same lexical category)
  */
 export interface LongmanEntry {
-  id: string;
   head: LongmanHead;
   senses: LongmanSense[];
 }

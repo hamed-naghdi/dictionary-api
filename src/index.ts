@@ -29,10 +29,10 @@ dotenv.config({ path: "./config/.env" });
 // };
 
 const dictionaryServicesV2 = {
-  // cambridge: new CambridgeDictionaryServiceV2(),
+  longman: new LongmanDictionaryServiceV2(),
   oxford: new OxfordDictionaryServiceV2(),
-  // "merriam-webster": new MerriamWebsterDictionaryServiceV2(),
-  longman: new LongmanDictionaryServiceV2()
+  cambridge: new CambridgeDictionaryServiceV2(),
+  "merriam-webster": new MerriamWebsterDictionaryServiceV2(),
 };
 
 // Pass dictionary services to v1 controller (using singleton pattern)

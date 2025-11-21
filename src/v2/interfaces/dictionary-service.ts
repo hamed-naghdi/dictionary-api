@@ -1,6 +1,7 @@
 import { CambridgeDictionaryResponse } from "../types/cambridge";
 import { MerriamWebsterDictionaryResponse } from "../types/merriam-webster";
 import { OxfordDictionaryResponse } from "../types/oxford";
+import {LongmanDictionaryResponse} from "../types/longman";
 
 /**
  * Interface for dictionary services in V2
@@ -26,4 +27,5 @@ export interface IDictionaryService<T = any> {
 export type DictionaryResponse =
   | CambridgeDictionaryResponse
   | MerriamWebsterDictionaryResponse
-  | OxfordDictionaryResponse;
+  | OxfordDictionaryResponse
+  | LongmanDictionaryResponse;

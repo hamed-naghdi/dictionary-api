@@ -6,6 +6,7 @@ import {
 import { CambridgeDictionaryResponse } from "../types/cambridge";
 import { MerriamWebsterDictionaryResponse } from "../types/merriam-webster";
 import { OxfordDictionaryResponse } from "../types/oxford";
+import {LongmanDictionaryResponse} from "../types/longman";
 
 /**
  * DictionaryController class following SOLID principles
@@ -99,6 +100,7 @@ export default class DictionaryController {
    */
   public getDictionaryFromSingleSource = (name: string) => {
     return async (req: Request, res: Response): Promise<void> => {
+        console.log(name);
       try {
         const { word } = req.params;
         const service = this.dictionaryServices[name];
@@ -128,6 +130,9 @@ export default class DictionaryController {
             break;
           case "oxford":
             data = (await service.lookupWord(word)) as OxfordDictionaryResponse;
+            break;
+          case "longman":
+            data = (await service.lookupWord(word)) as LongmanDictionaryResponse;
             break;
           default:
             data = await service.lookupWord(word);

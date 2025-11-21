@@ -23,16 +23,27 @@ export interface LongmanPronunciation {
   americanAudioUrl?: string;
 }
 
+export type LongmanExampleItem = LongmanExample | LongmanCollectionExample | LongmanPropFormExample;
+
 /**
  * Represents an example sentence for a definition
  */
 export interface LongmanExample {
   text: string;
   audio?: string;
-  collocation?: string;
   glossary?: string;
-  /** (grammar form) PROPFORMPREP */
-  propForm?: string;
+}
+
+export interface LongmanCollectionExample {
+    collocation: string;
+    glossary?: string;
+    examples?: LongmanExample[];
+}
+
+export interface LongmanPropFormExample {
+    /** (grammar form) PROPFORMPREP */
+    propForm: string;
+    examples?: LongmanExample[];
 }
 
 /**
@@ -48,7 +59,7 @@ export interface LongmanSense {
   synonyms?: string[];
   opposites?: string[];
   image?: string;
-  examples?: LongmanExample[];
+  examples?: LongmanExampleItem[];
 }
 
 /**
